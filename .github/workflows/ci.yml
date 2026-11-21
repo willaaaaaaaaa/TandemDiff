@@ -1,0 +1,28 @@
+name: macOS
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Test
+        run: swift test
+      - name: Build and verify the Universal app
+        if: matrix.runner == 'macos-15'
+        run: |
+          ./script/build_and_run.sh --universal --build-only
+          codesign --verify --strict --verbose=2 dist/TandemDiff.app
+          for cpu in arm64 x86_64; do
+            lipo dist/TandemDiff.app/Contents/MacOS/TandemDiff -verify_arch "$cpu"
+          done
