@@ -4,8 +4,9 @@
 | --- | --- |
 | Deployment target | macOS 14.0 or later |
 | Local build | The build script defaults to a debug app for the build Mac. Pass `--universal --build-only` for a release build containing arm64 and x86_64. |
-| Native runtime check | Apple M5 (arm64), macOS 27.0.1 (26A434), Xcode 27.2 |
-| Other environments | Native execution on an Intel Mac and execution on macOS 14 have yet to be verified. Reports from other Macs are welcome. |
+| Local runtime check | Apple M5 (arm64), macOS 27.0.1 (26A434), Xcode 27.2 |
+| GitHub-hosted CI | The Swift test suite passed on Apple silicon (macOS 15) and Intel (macOS 26). The Apple silicon job also built the Universal app and checked its signature and both CPU architectures. [CI run](https://github.com/willaaaaaaaaa/TandemDiff/actions/runs/44920419448) |
+| Open runtime checks | Interactive use on an Intel Mac and running TandemDiff on macOS 14. Reports from either environment are welcome. |
 | Input storage | Local APFS. Copy inputs out of network shares and cloud-managed folders before comparing them. |
 
 The minimum OS comes from the [package manifest](../Package.swift) and the app bundle. A Mac must run a compatible macOS version and have a CPU architecture included in the build. The project uses Apple frameworks and has no external Swift package dependencies.
