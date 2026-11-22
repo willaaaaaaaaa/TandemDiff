@@ -1,6 +1,6 @@
 # TandemDiff
 
-[简体中文](README.zh-CN.md) · [Build from source](#build-from-source) · [Changelog](CHANGELOG.md)
+[简体中文](README.zh-CN.md) · [Download](https://github.com/willaaaaaaaaa/TandemDiff/releases/latest) · [Build from source](#build-from-source) · [Changelog](CHANGELOG.md)
 
 TandemDiff is a native Mac app for comparing two copies of a folder or text file. Find the files that changed, open a pair side by side, and bring across just the edits you want to keep. Comparisons run locally.
 
@@ -26,7 +26,7 @@ Apply a change to either pane or edit the text directly. You can undo the edit a
 
 ## Build from source
 
-Use a Mac with Xcode and the macOS SDK. The package declares Swift tools 5.10. Run this command from the root of the checkout.
+To skip building, download the latest Universal build from [GitHub Releases](https://github.com/willaaaaaaaaa/TandemDiff/releases/latest). To build from source, use a Mac with Xcode and the macOS SDK. The package declares Swift tools 5.10. Run this command from the root of the checkout.
 
 ```sh
 ./script/build_and_run.sh
