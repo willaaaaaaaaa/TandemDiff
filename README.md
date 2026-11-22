@@ -14,6 +14,8 @@ The folder view lines up matching paths. In this example, `drafts.md` exists onl
 
 ![Baseline and Release folders side by side, with identical, different, left-only, and right-only entries](docs/screenshots/folders.png)
 
+Click an item on one side, then Command-click an item on the other. Right-click either selected item and choose **Compare Selected Files** for two text files or **Set as Base Folders on Both Sides** for two folders. The items can have different names or appear on different rows.
+
 Open **Name Filters** to set file and folder rules separately. Enter `build` under **Exclude folders** to hide build directories, or `*.log` under **Exclude files** to hide log files. Enter one pattern per line, then choose **Apply**. To copy whole files, select the rows and choose a direction. The preview lists the destinations and any files TandemDiff will skip before you confirm.
 
 ## Keep one text change at a time
@@ -32,7 +34,7 @@ To skip building, download the latest Universal build from [GitHub Releases](htt
 ./script/build_and_run.sh
 ```
 
-The script builds and opens `dist/TandemDiff.app`. To run the tests or build a Universal app without launching it, use the following commands.
+The script builds the app, installs it as `/Applications/TandemDiff.app`, and opens it. The Mac keeps only that one copy. To run the tests or build a Universal app without launching it, use the following commands. `--build-only` writes `dist/TandemDiff.app` for packaging.
 
 ```sh
 swift test

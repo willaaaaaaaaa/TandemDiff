@@ -552,6 +552,182 @@ final class FolderSessionTests: XCTestCase {
         }
     }
 
+    func testCommandClickComparesSelectedTextAndSetsSelectedFolderPair() async throws {
+        _ = NSApplication.shared
+        try await fixture { temp, left, right in
+            let leftText = left.appendingPathComponent("poteto-agent.md")
+            let rightText = right.appendingPathComponent("my-agent.md")
+            try write("left file", to: leftText.lastPathComponent, in: left)
+            try write("right file", to: rightText.lastPathComponent, in: right)
+            try write("left decoy", to: rightText.lastPathComponent, in: left)
+            try write("right decoy", to: leftText.lastPathComponent, in: right)
+            try write("before", to: "baseline/common.txt", in: left)
+            try write("after", to: "release/common.txt", in: right)
+
+            let library = SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json"))
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: "TandemDiffTest.\(UUID())"))
+            let workspace = Workspace(registry: EditRegistry(), library: library, sessionDefaults: SessionDefaults(store: defaults))
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
+            let parent = try XCTUnwrap(workspace.current)
+            guard case .folders(let session) = parent.payload else { return XCTFail("Expected Folder Compare") }
+            try await waitUntil { session.complete }
+            let host = NSHostingView(rootView: FolderView(session: session, workspace: workspace))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+
+            @MainActor func descendant<T: NSView>(_ view: NSView, of type: T.Type) -> T? {
+                if let found = view as? T { return found }
+                return view.subviews.lazy.compactMap { descendant($0, of: type) }.first
+            }
+            let table = try XCTUnwrap(descendant(host, of: NSTableView.self))
+            let anchor = try XCTUnwrap(descendant(host, of: FolderTableInput.Anchor.self))
+            table.tableColumns[0].width = 260
+            table.layoutSubtreeIfNeeded()
+
+            @MainActor func event(_ type: NSEvent.EventType, _ path: String, _ column: Int, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+                let row = try XCTUnwrap(session.rows.firstIndex { $0.entry.path == path })
+                let cell = table.frameOfCell(atColumn: column, row: row)
+                let point = table.convert(NSPoint(x: cell.midX, y: cell.midY), to: nil)
+                return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers, timestamp: 0,
+                                                        windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            }
+            @MainActor func menu(_ path: String, _ column: Int) throws -> NSMenu {
+                try XCTUnwrap(anchor.pointerMenu(for: event(.rightMouseDown, path, column))?.1)
+            }
+            @MainActor func select(_ path: String, _ column: Int) throws {
+                let click = try event(.leftMouseDown, path, column)
+                if !anchor.handle(click) {
+                    let row = try XCTUnwrap(session.rows.firstIndex { $0.entry.path == path })
+                    table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                }
+                _ = try menu(path, column)
+            }
+            @MainActor func extendSelection(_ path: String, _ column: Int) throws {
+                XCTAssertTrue(try anchor.handle(event(.leftMouseDown, path, column, modifiers: .command)))
+            }
+            @MainActor func perform(_ title: String, in menu: NSMenu) throws {
+                let item = try XCTUnwrap(menu.item(withTitle: title))
+                XCTAssertTrue(item.isEnabled)
+                menu.performActionForItem(at: menu.index(of: item))
+            }
+
+            let compare = L("Compare Selected Files", "比较所选文件")
+            let roots = L("Set as Base Folders on Both Sides", "将两侧目录设为基点文件夹")
+            let leftName = leftText.lastPathComponent
+            let rightName = rightText.lastPathComponent
+            for (first, firstColumn, second, secondColumn) in [(leftName, 0, rightName, 4), (rightName, 4, leftName, 0)] {
+                try select(first, firstColumn)
+                try extendSelection(second, secondColumn)
+                try perform(compare, in: menu(second, secondColumn))
+                let child = try XCTUnwrap(workspace.current)
+                guard case .text(let editor) = child.payload else { return XCTFail("Expected one Text Compare tab") }
+                XCTAssertEqual(workspace.tabs.count, 2)
+                XCTAssertEqual(child.parent, parent.id)
+                XCTAssertEqual(editor.leftURL, leftText)
+                XCTAssertEqual(editor.rightURL, rightText)
+                try await waitUntil { TextSide.allCases.allSatisfy { !editor.pane($0).busy } }
+                XCTAssertEqual(editor.pane(.left).buffer.content.string, "left file")
+                XCTAssertEqual(editor.pane(.right).buffer.content.string, "right file")
+                await workspace.close(child.id)
+                XCTAssertEqual(workspace.active, parent.id)
+                XCTAssertNotNil(try menu(first, firstColumn).item(withTitle: compare))
+            }
+
+            try select(leftName, 0)
+            try extendSelection("release", 4)
+            let mixed = try menu("release", 4)
+            XCTAssertNil(mixed.item(withTitle: compare))
+            XCTAssertNil(mixed.item(withTitle: roots))
+
+            try select("release", 4)
+            try extendSelection("baseline", 0)
+            try perform(roots, in: menu("baseline", 0))
+            XCTAssertEqual(session.left?.path, left.appendingPathComponent("baseline").path)
+            XCTAssertEqual(session.right?.path, right.appendingPathComponent("release").path)
+            try await waitUntil { session.complete }
+            XCTAssertEqual(session.rows.map(\.entry.path), ["common.txt"])
+            session.visitLocation(backward: true)
+            XCTAssertEqual(session.left, left)
+            XCTAssertEqual(session.right, right)
+            await workspace.close(parent.id)
+        }
+    }
+
+    func testCopyPreviewUsesOnlySelectedSourcesInItsDirection() async throws {
+        try await fixture { _, left, right in
+            try write("chosen left", to: "left.md", in: left)
+            try write("unselected left", to: "right.md", in: left)
+            try write("chosen right", to: "right.md", in: right)
+            try write("unselected right", to: "left.md", in: right)
+            let session = FolderSession(left: left, right: right, registry: EditRegistry(), observesFileChanges: false)
+            session.refresh()
+            try await waitUntil { session.complete }
+            let leftFile = try XCTUnwrap(session.entries.first { $0.path == "left.md" })
+            let rightFile = try XCTUnwrap(session.entries.first { $0.path == "right.md" })
+            session.toggleSelectedSide(.left, of: leftFile, extending: [])
+            session.toggleSelectedSide(.right, of: rightFile, extending: [leftFile.id])
+            for (direction, source, destination) in [(CopyDirection.right, leftFile.left, leftFile.right), (.left, rightFile.right, rightFile.left)] {
+                let menu = FolderContextMenu(session: session, ids: session.selection, side: nil, compare: { _ in }).nativeMenu()
+                let item = try XCTUnwrap(menu.item(withTitle: direction.label))
+                XCTAssertTrue(item.isEnabled)
+                menu.performActionForItem(at: menu.index(of: item))
+                try await waitUntil { session.showPreview }
+                let planned = session.preview.filter(\.action.executable)
+                XCTAssertEqual(planned.map(\.source), [source])
+                XCTAssertEqual(planned.map(\.destination), [try XCTUnwrap(destination)])
+                session.invalidatePreview()
+            }
+            await session.close()
+        }
+    }
+
+    func testReturningFromSelectedTextPairRestoresFolderViewport() async throws {
+        _ = NSApplication.shared
+        try await fixture { temp, left, right in
+            try write("left", to: "z-left.md", in: left)
+            try write("right", to: "z-right.md", in: right)
+            for index in 0..<50 { try write("filler", to: "row-\(index).txt", in: left) }
+            let library = SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json"))
+            let workspace = Workspace(registry: EditRegistry(), library: library)
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
+            guard case .folders(let session)? = workspace.current?.payload else { return XCTFail("Expected Folder Compare") }
+            try await waitUntil { session.complete }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
+            @MainActor func nativeTable(in view: NSView) -> NSTableView? {
+                (view as? NSTableView) ?? view.subviews.lazy.compactMap { nativeTable(in: $0) }.first
+            }
+            @MainActor func showFolder() throws -> NSTableView {
+                let host = NSHostingView(rootView: FolderView(session: session, workspace: workspace))
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                return try XCTUnwrap(nativeTable(in: host))
+            }
+            let originalTable = try showFolder()
+            try await waitUntil { session.readTableScrollOrigin?() != nil }
+            let leftFile = try XCTUnwrap(session.entries.first { $0.path == "z-left.md" })
+            let rightFile = try XCTUnwrap(session.entries.first { $0.path == "z-right.md" })
+            session.toggleSelectedSide(.left, of: leftFile, extending: [])
+            session.toggleSelectedSide(.right, of: rightFile, extending: [leftFile.id])
+            originalTable.scrollRowToVisible(originalTable.numberOfRows - 1)
+            let scrollView = try XCTUnwrap(originalTable.enclosingScrollView)
+            let before = scrollView.contentView.bounds.origin.y
+            XCTAssertGreaterThan(before, 100)
+            session.openSelectedPair()
+            let child = try XCTUnwrap(workspace.current)
+            guard case .text(let editor) = child.payload else { return XCTFail("Expected Text Compare") }
+            window.contentView = NSHostingView(rootView: TextSessionView(model: editor, workspace: workspace))
+            try await waitUntil { TextSide.allCases.allSatisfy { !editor.pane($0).busy } }
+            await workspace.close(child.id)
+            let returnedTable = try showFolder()
+            let restored = try XCTUnwrap(returnedTable.enclosingScrollView)
+            try await waitUntil { abs(restored.contentView.bounds.origin.y - before) < 1 }
+            try await waitUntil { returnedTable.selectedRowIndexes.count == 2 }
+            let expectedRows = IndexSet(session.rows.indices.filter { session.selection.contains(session.rows[$0].id) })
+            XCTAssertEqual(returnedTable.selectedRowIndexes, expectedRows)
+        }
+    }
+
     func testAllVisibleTextFilesOfferOnlyContentComparison() async throws {
         try await fixture { _, left, right in
             for name in ["a.txt", "b.txt", "c.txt"] {
@@ -652,10 +828,10 @@ final class FolderSessionTests: XCTestCase {
             let anchor = try XCTUnwrap(descendant(host, of: FolderTableInput.Anchor.self))
             table.tableColumns[0].width = 260
 
-            @MainActor func event(_ type: NSEvent.EventType, column: Int) throws -> NSEvent {
-                let rect = table.frameOfCell(atColumn: column, row: 0)
+            @MainActor func event(_ type: NSEvent.EventType, column: Int, row: Int = 0, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+                let rect = table.frameOfCell(atColumn: column, row: row)
                 let point = table.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
-                return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers, timestamp: 0,
                                                         windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
             }
             @MainActor func checkTint(_ expected: Set<Int>, row: Int = 0, file: StaticString = #filePath, line: UInt = #line) async throws {
@@ -681,7 +857,13 @@ final class FolderSessionTests: XCTestCase {
                 try await checkTint(Set(0..<7))
                 XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 0))
             }
+            XCTAssertNotNil(try anchor.pointerMenu(for: event(.rightMouseDown, column: 1)))
+            XCTAssertTrue(try anchor.handle(event(.leftMouseDown, column: 5, row: 1, modifiers: .command)))
+            try await checkTint([0, 1, 2])
+            try await checkTint([4, 5, 6], row: 1)
             XCTAssertNotNil(try anchor.pointerMenu(for: event(.rightMouseDown, column: 5)))
+            try await checkTint([4, 5, 6])
+            try await checkTint([], row: 1)
             session.sortOrder = [FolderRowSort(column: .leftName, order: .reverse)]
             let last = session.rows.count - 1
             table.scrollRowToVisible(0)

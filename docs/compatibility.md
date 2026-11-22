@@ -37,4 +37,12 @@ The expected architectures are `arm64` and `x86_64`, with `minos 14.0` on both s
 
 ## Distributing a binary
 
-The build script ad hoc signs the local app. Pushing a `vX.Y.Z` tag runs the Release workflow, which builds the Universal app from the tagged source on a GitHub-hosted Apple silicon runner (macOS 15), verifies the signature, both CPU architectures, and `minos 14.0`, and publishes a ZIP of the app with its SHA-256 checksum to the GitHub Release described by the changelog section for that version. Release downloads are ad hoc signed, so Gatekeeper shows an unidentified-developer warning. Right-click the app and choose **Open** the first time. Signing with Developer ID and notarizing needs a signing identity in repository secrets. Until one is configured, releases stay ad hoc signed. [Apple’s notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+The build script ad hoc signs the local app. Pushing a `vX.Y.Z` tag runs the Release workflow, which builds the Universal app from the tagged source on a GitHub-hosted Apple silicon runner (macOS 15), verifies the signature, both CPU architectures, and `minos 14.0`, and publishes a ZIP of the app with its SHA-256 checksum to the GitHub Release described by the changelog section for that version. Apple has not notarized the ad hoc signed release downloads. Signing with Developer ID and notarizing needs a signing identity in repository secrets. Until one is configured, releases stay ad hoc signed. [Apple’s notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+
+### First launch
+
+1. Download the ZIP and its `.sha256` file from the [official TandemDiff GitHub Releases page](https://github.com/willaaaaaaaaa/TandemDiff/releases). Save both files in the same folder.
+2. From that folder, run `shasum -a 256 -c` followed by the `.sha256` filename. If the command reports `OK`, unzip the archive and double-click `TandemDiff.app`.
+3. If macOS blocks the app because it cannot verify the developer, continue only if you trust the download. Choose **System Settings → Privacy & Security → Open Anyway** if the option appears, then click **Open** to confirm.
+
+If macOS says the app is damaged, contains malware, or will damage your computer, stop. [Apple’s guide to safely opening apps](https://support.apple.com/en-us/102445)

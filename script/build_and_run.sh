@@ -12,10 +12,13 @@ fi
 bin_dir="$(swift build -c "$configuration" ${architectures[@]+"${architectures[@]}"} --show-bin-path)"
 swift build -c "$configuration" ${architectures[@]+"${architectures[@]}"}
 
-bundle="$PWD/dist/TandemDiff.app"
-mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+# Stage the bundle in the system temp folder, which launchers do not index,
+# so the only app copy left on disk is the installed one.
+stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/tandemdiff-bundle.XXXXXX")"
 asset_dir="$(mktemp -d "${TMPDIR:-/tmp}/tandemdiff-icon.XXXXXX")"
-trap 'rm -rf "$asset_dir"' EXIT
+trap 'rm -rf "$stage_dir" "$asset_dir"' EXIT
+bundle="$stage_dir/TandemDiff.app"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 iconset="$asset_dir/TandemDiff.iconset"
 icon_source="assets/TandemDiff.png"
 mkdir "$iconset"
@@ -49,11 +52,42 @@ cat > "$bundle/Contents/Info.plist" <<'PLIST'
 PLIST
 codesign --force --sign - "$bundle"
 
+dest=/Applications/TandemDiff.app
+
+install_app() {
+    if [[ ! -d "$bundle" ]]; then
+        printf 'The staged bundle is missing: %s\n' "$bundle" >&2
+        exit 1
+    fi
+    replaced="$stage_dir/replaced-TandemDiff.app"
+    if [[ -d "$dest" ]] && ! mv "$dest" "$replaced"; then
+        printf 'Cannot replace %s. Remove it manually and rerun.\n' "$dest" >&2
+        exit 1
+    fi
+    if ! mv "$bundle" "$dest"; then
+        if [[ -d "$replaced" ]]; then mv "$replaced" "$dest"; fi
+        printf 'Cannot install to %s. The previous app was kept.\n' "$dest" >&2
+        exit 1
+    fi
+    rm -rf -- "${PWD}/dist/TandemDiff.app"
+    printf 'Installed %s\n' "$dest"
+}
+
 case "${1:-}" in
-    --build-only) printf '%s\n' "$bundle" ;;
-    --debug) lldb -- "$bundle/Contents/MacOS/TandemDiff" ;;
+    --build-only)
+        out="${PWD}/dist/TandemDiff.app"
+        mkdir -p "${PWD}/dist"
+        rm -rf -- "$out"
+        mv "$bundle" "$out"
+        printf '%s\n' "$out"
+        ;;
+    --debug)
+        install_app
+        lldb -- "$dest/Contents/MacOS/TandemDiff"
+        ;;
     ""|--verify|--logs)
-        open "$bundle"
+        install_app
+        open "$dest"
         if [[ "${1:-}" == "--verify" ]]; then
             sleep 1
             pgrep -x TandemDiff >/dev/null

@@ -24,8 +24,14 @@ struct FolderContextMenu {
         guard !entries.isEmpty, entries.count == ids.count else { groups = []; return }
         let allVisible = session.isAllVisibleSelection(count: entries.count)
         let ready = session.complete && !session.copying
-        var open = [Item(L("Compare Contents", "比较内容"), enabled: ready && !session.preparing) { compare(ids) }]
-        if !allVisible && entries.allSatisfy(\.canOpenAsText) {
+        let individualSides = session.selectedSides
+        let pair = ids == session.selection ? session.selectedPair : nil
+        var open: [Item] = []
+        if pair?.canCompareText == true {
+            open.append(Item(L("Compare Selected Files", "比较所选文件"), enabled: ready) { session.openSelectedPair() })
+        }
+        open.append(Item(L("Compare Contents", "比较内容"), enabled: ready && !session.preparing) { compare(ids) })
+        if individualSides.isEmpty && !allVisible && entries.allSatisfy(\.canOpenAsText) {
             open.append(Item(L("Open in Text Compare", "在文本比较中打开"), enabled: ready) { session.openItems(ids: ids) })
         }
         if session.structure != .flatList, entries.contains(where: { !$0.children.isEmpty }) {
@@ -40,36 +46,40 @@ struct FolderContextMenu {
 
         var roots: [Item] = []
         var paths: [Item] = []
-        for target in side.map({ [$0] }) ?? TextSide.allCases {
-            if entries.count == 1, let entry = entries.first, entry.canBeBaseFolder(on: target) {
-                let title = side != nil ? L("Set as Base Folder", "设为基点文件夹") :
+        if pair?.canUseAsRoots == true {
+            roots.append(Item(L("Set as Base Folders on Both Sides", "将两侧目录设为基点文件夹"), enabled: ready) { session.useSelectedFoldersAsRoots() })
+        }
+        let menuSide = individualSides.isEmpty ? side : nil
+        for target in menuSide.map({ [$0] }) ?? TextSide.allCases {
+            let selected = individualSides.isEmpty ? entries : entries.filter { individualSides[$0.id]?.includes(target) == true }
+            if selected.count == 1, let entry = selected.first, entry.canBeBaseFolder(on: target) {
+                let title = menuSide != nil ? L("Set as Base Folder", "设为基点文件夹") :
                     (target == .left ? L("Set as Left Base Folder", "设为左侧基点文件夹") : L("Set as Right Base Folder", "设为右侧基点文件夹"))
                 roots.append(Item(title, enabled: ready) { session.useAsRoots(entry, side: target) })
             }
 
-            let urls = entries.compactMap { $0.url(on: target) }
+            let urls = selected.compactMap { $0.url(on: target) }
             guard !urls.isEmpty else { continue }
-            let reveal = side != nil ? L("Reveal in Finder", "在访达中显示") :
+            let reveal = menuSide != nil ? L("Reveal in Finder", "在访达中显示") :
                 (target == .left ? L("Reveal Left in Finder", "在访达中显示左侧项目") : L("Reveal Right in Finder", "在访达中显示右侧项目"))
             paths.append(Item(reveal) { NSWorkspace.shared.activateFileViewerSelecting(urls) })
-            let copyPaths = side != nil ? L("Copy Paths", "复制路径") :
+            let copyPaths = menuSide != nil ? L("Copy Paths", "复制路径") :
                 (target == .left ? L("Copy Left Paths", "复制左侧路径") : L("Copy Right Paths", "复制右侧路径"))
             paths.append(Item(copyPaths) { Self.copy(urls.map(\.path)) })
         }
-        if entries.count == 1, let entry = entries.first, entry.canBeBaseFolder(on: nil) {
+        if individualSides.isEmpty, entries.count == 1, let entry = entries.first, entry.canBeBaseFolder(on: nil) {
             roots.append(Item(L("Set as Base Folders on Both Sides", "将两侧目录设为基点文件夹"), enabled: ready) { session.useAsRoots(entry) })
         }
         paths.append(Item(L("Copy Names", "复制名称")) {
             Self.copy(entries.map { ($0.path as NSString).lastPathComponent })
         })
 
-        let canCopy = session.canPreview(ids: ids)
         var copies: [Item] = []
-        if entries.contains(where: { $0.left != nil }) {
-            copies.append(Item(CopyDirection.right.label, enabled: canCopy) { session.prepare(.right, selectedIDs: ids) })
+        if entries.contains(where: { $0.left != nil && (individualSides.isEmpty || individualSides[$0.id]?.includes(.left) == true) }) {
+            copies.append(Item(CopyDirection.right.label, enabled: session.canPreview(.right, ids: ids)) { session.prepare(.right, selectedIDs: ids) })
         }
-        if entries.contains(where: { $0.right != nil }) {
-            copies.append(Item(CopyDirection.left.label, enabled: canCopy) { session.prepare(.left, selectedIDs: ids) })
+        if entries.contains(where: { $0.right != nil && (individualSides.isEmpty || individualSides[$0.id]?.includes(.right) == true) }) {
+            copies.append(Item(CopyDirection.left.label, enabled: session.canPreview(.left, ids: ids)) { session.prepare(.left, selectedIDs: ids) })
         }
         groups = [open, roots, paths, copies].filter { !$0.isEmpty }
     }

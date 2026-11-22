@@ -35,9 +35,12 @@ jobs:
           shasum -a 256 "$asset" > "$asset.sha256"
           awk -v ver="$version" 'BEGIN{printing=0} /^## /{printing = (index($0, "## " ver " (") == 1)} printing' CHANGELOG.md > release-notes.md
           test -s release-notes.md
-          printf '\nThe ZIP holds a Universal build (arm64 and x86_64) for macOS 14.0 or later, built from this tag and ad hoc signed.\n' >> release-notes.md
-          printf 'To open a fresh download the first time, right-click TandemDiff.app and choose Open.\n' >> release-notes.md
-          printf 'The attached `.sha256` file lists the archive checksum.\n' >> release-notes.md
+          printf '\nThe ZIP holds a Universal build (arm64 and x86_64) for macOS 14.0 or later, built from this tag and ad hoc signed. Apple has not notarized this build.\n' >> release-notes.md
+          printf '\n### First launch\n\n' >> release-notes.md
+          printf '1. Download the ZIP and its `.sha256` file from the [official TandemDiff GitHub Releases page](https://github.com/willaaaaaaaaa/TandemDiff/releases). Save both files in the same folder.\n' >> release-notes.md
+          printf '2. From that folder, run `shasum -a 256 -c` followed by the `.sha256` filename. If the command reports `OK`, unzip the archive and double-click `TandemDiff.app`.\n' >> release-notes.md
+          printf '3. If macOS blocks the app because it cannot verify the developer, continue only if you trust the download. Choose **System Settings → Privacy & Security → Open Anyway** if the option appears, then click **Open** to confirm.\n' >> release-notes.md
+          printf '\nIf macOS says the app is damaged, contains malware, or will damage your computer, stop. [Apple’s guide to safely opening apps](https://support.apple.com/en-us/102445)\n' >> release-notes.md
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

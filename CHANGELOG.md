@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Command-click items on opposite sides of Folder Compare to compare two text files directly or set two folders as the comparison roots, even when their names differ.
+
+### Changed
+
+- `script/build_and_run.sh` now installs the app it builds to `/Applications/TandemDiff.app` and opens it from there, so the Mac keeps a single app copy instead of an extra one under `dist/`. `--build-only` still writes `dist/TandemDiff.app` for packaging.
+
 ## 0.1.0 (2026-11-22)
 
 ### Added

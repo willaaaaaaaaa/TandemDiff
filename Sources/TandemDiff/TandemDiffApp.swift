@@ -281,7 +281,6 @@ private struct WorkspaceCommands: Commands {
         }
         CommandMenu(L("Comparison", "比较")) {
             let canNavigate = folder?.canNavigateDifferences ?? text?.canNavigateDifferences ?? false
-            let canPreview = folder.map { $0.canPreview(ids: $0.selection) }
             ForEach(ComparisonDisplay.allCases, id: \.self) { mode in
                 Button(mode.title) {
                     folder?.comparisonDisplay = mode
@@ -329,8 +328,8 @@ private struct WorkspaceCommands: Commands {
                     .disabled(folder.copying || (folder.left == nil && folder.right == nil))
             }
             Divider()
-            transfer(.left, canPreview: canPreview)
-            transfer(.right, canPreview: canPreview)
+            transfer(.left)
+            transfer(.right)
             if let text {
                 let side = text.focused
                 let source = text.pane(side), target = text.pane(side.other)
@@ -352,14 +351,14 @@ private struct WorkspaceCommands: Commands {
         }
     }
 
-    private func transfer(_ direction: CopyDirection, canPreview: Bool?) -> some View {
+    private func transfer(_ direction: CopyDirection) -> some View {
         let from: TextSide = direction == .right ? .left : .right
         return Button(text?.describeTransfer(from) ?? direction.label) {
             folder?.prepare(direction)
             text?.apply(from: from)
         }
         .keyboardShortcut(direction == .right ? .rightArrow : .leftArrow, modifiers: [.command, .option])
-        .disabled(!(canPreview ?? text?.canApplyChange(from: from) ?? false))
+        .disabled(!(folder?.canPreview(direction) ?? text?.canApplyChange(from: from) ?? false))
     }
 }
 
