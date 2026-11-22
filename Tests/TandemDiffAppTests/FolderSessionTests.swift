@@ -567,7 +567,7 @@ final class FolderSessionTests: XCTestCase {
             let library = SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json"))
             let defaults = try XCTUnwrap(UserDefaults(suiteName: "TandemDiffTest.\(UUID())"))
             let workspace = Workspace(registry: EditRegistry(), library: library, sessionDefaults: SessionDefaults(store: defaults))
-            workspace.makeFolders(left: left, right: right)
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
             let parent = try XCTUnwrap(workspace.current)
             guard case .folders(let session) = parent.payload else { return XCTFail("Expected Folder Compare") }
             try await waitUntil { session.complete }
@@ -690,7 +690,7 @@ final class FolderSessionTests: XCTestCase {
             for index in 0..<50 { try write("filler", to: "row-\(index).txt", in: left) }
             let library = SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json"))
             let workspace = Workspace(registry: EditRegistry(), library: library)
-            workspace.makeFolders(left: left, right: right)
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
             guard case .folders(let session)? = workspace.current?.payload else { return XCTFail("Expected Folder Compare") }
             try await waitUntil { session.complete }
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.titled], backing: .buffered, defer: false)

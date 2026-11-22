@@ -458,14 +458,14 @@ final class Workspace: ObservableObject {
         active = tab.id
     }
 
-    func makeFolders(left: URL? = nil, right: URL? = nil, restoring: SessionRecord? = nil) {
+    func makeFolders(left: URL? = nil, right: URL? = nil, restoring: SessionRecord? = nil, observesFileChanges: Bool = true) {
         let id = restoring?.id ?? UUID()
         if tabs.contains(where: { $0.id == id }) {
             active = id
             return
         }
         let defaults = restoring == nil ? sessionDefaults.folders : FolderSessionDefaults()
-        let folder = FolderSession(left: left, right: right, registry: registry, defaults: defaults)
+        let folder = FolderSession(left: left, right: right, registry: registry, defaults: defaults, observesFileChanges: observesFileChanges)
         folder.onOpen = { [weak self, weak folder] entry in
             guard let self, let folder else { return }
             self.openChild(entry, of: folder, id: id)
