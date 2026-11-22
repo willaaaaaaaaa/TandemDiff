@@ -34,7 +34,7 @@ TandemDiff 是一款原生 Mac 文件比较工具。把同一项目的两个版�
 ./script/build_and_run.sh
 ```
 
-脚本会构建并打开 `dist/TandemDiff.app`。需要运行测试或仅构建通用版本时，使用以下命令。
+脚本会构建应用，安装为 `/Applications/TandemDiff.app` 并打开。整台 Mac 只保留这一份。需要运行测试或仅构建通用版本时，使用以下命令。`--build-only` 会把应用写到 `dist/TandemDiff.app`，供打包使用。
 
 ```sh
 swift test

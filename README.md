@@ -34,7 +34,7 @@ To skip building, download the latest Universal build from [GitHub Releases](htt
 ./script/build_and_run.sh
 ```
 
-The script builds and opens `dist/TandemDiff.app`. To run the tests or build a Universal app without launching it, use the following commands.
+The script builds the app, installs it as `/Applications/TandemDiff.app`, and opens it. The Mac keeps only that one copy. To run the tests or build a Universal app without launching it, use the following commands. `--build-only` writes `dist/TandemDiff.app` for packaging.
 
 ```sh
 swift test
