@@ -19,6 +19,17 @@ extension FolderEntry {
     }
 }
 
+struct FolderSelectionPair {
+    let left: FolderEntry
+    let right: FolderEntry
+
+    var canCompareText: Bool {
+        left.leftText != nil && right.rightText != nil
+    }
+
+    var canUseAsRoots: Bool { left.canBeBaseFolder(on: .left) && right.canBeBaseFolder(on: .right) }
+}
+
 struct FolderActivity: Identifiable {
     let id = UUID()
     let time = Date()
@@ -28,11 +39,13 @@ struct FolderActivity: Identifiable {
 
 extension FolderSession {
     func isAllVisibleSelection(count: Int) -> Bool {
-        count > 0 && count == rows.count && (count > 1 || explicitSelectAll)
+        selectedSides.isEmpty && count > 0 && count == rows.count && (count > 1 || explicitSelectAll)
     }
 
     func canOpenSelected(includingFolders: Bool) -> Bool {
-        guard complete, !copying, selection.count == 1, let id = selection.first,
+        guard complete, !copying else { return false }
+        if selectedPair?.canCompareText == true { return true }
+        guard selection.count == 1, let id = selection.first,
               let entry = rows.first(where: { $0.id == id })?.entry else { return false }
         return entry.canOpenAsText || (includingFolders && !entry.children.isEmpty)
     }

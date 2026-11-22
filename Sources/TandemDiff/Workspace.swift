@@ -65,6 +65,7 @@ struct SessionRecord: Codable, Identifiable {
     var expansion: Set<Data>?
     var selection: Set<Data>?
     var folderSelectionScope: FolderSelectionScope?
+    var folderSelectedSides: [Data: FolderSelectionScope]?
     var folderWriteProtected: Bool?
     var textSettings: TextSessionSettings?
     var inheritedTextProtection: Bool?
@@ -469,6 +470,10 @@ final class Workspace: ObservableObject {
             guard let self, let folder else { return }
             self.openChild(entry, of: folder, id: id)
         }
+        folder.onOpenPair = { [weak self, weak folder] left, right in
+            guard let self, let folder else { return }
+            self.openChild(left: left, right: right, of: folder, id: id)
+        }
         folder.onChange = { [weak self] in self?.objectWillChange.send() }
         folder.onRecent = { [weak self] roots in
             if !roots.isEmpty { self?.library.recordFolders(roots) }
@@ -507,7 +512,7 @@ final class Workspace: ObservableObject {
     func makeText(
         left: URL? = nil, right: URL? = nil,
         leftMissing: Bool = false, rightMissing: Bool = false,
-        parent: UUID? = nil, folder: FolderSession? = nil, relativePath: String? = nil, excluded: Bool = false,
+        parent: UUID? = nil, folder: FolderSession? = nil, relativePaths: [String] = [], excluded: Bool = false,
         restoring: SessionRecord? = nil
     ) {
         let id = restoring?.id ?? UUID()
@@ -540,9 +545,9 @@ final class Workspace: ObservableObject {
         if settings != TextSessionSettings() { model.restore(settings) }
         let boundRoots = [folder?.left, folder?.right].compactMap { $0 }.map(SavedPath.init)
         registry.register(model, id: id) {
-            guard let folder, let relativePath else { return true }
+            guard let folder, !relativePaths.isEmpty else { return true }
             guard boundRoots.count == 2, boundRoots.allSatisfy({ (try? $0.resolve()) != nil }) else { return false }
-            return folder.rules.admitsTextPath(relativePath) && !folder.writeProtected
+            return relativePaths.allSatisfy(folder.rules.admitsTextPath) && !folder.writeProtected
         }
         let tab = Tab(id: id, payload: .text(model), name: restoring?.name, parent: parent, inheritedGuard: inheritedGuard, noFolderWrite: excluded, definitionID: restoring?.name == nil ? nil : restoring?.id, revision: restoring?.revision)
         activateNewTab(tab)
@@ -559,16 +564,22 @@ final class Workspace: ObservableObject {
             notice = L("This pair contains an unsupported entry.", "这组条目含有不支持的文件。")
             return
         }
+        openChild(left: entry, right: entry, of: folder, id: id)
+    }
+
+    private func openChild(left leftEntry: FolderEntry, right rightEntry: FolderEntry, of folder: FolderSession, id: UUID) {
         guard let left = folder.left, let right = folder.right else { return }
-        let leftURL = entry.left ?? LocalAccess.appending(entry.path, to: left)
-        let rightURL = entry.right ?? LocalAccess.appending(entry.path, to: right)
+        let leftURL = leftEntry.left ?? LocalAccess.appending(leftEntry.path, to: left)
+        let rightURL = rightEntry.right ?? LocalAccess.appending(rightEntry.path, to: right)
+        let excluded = leftEntry.state == .excluded || rightEntry.state == .excluded
         if let match = tabs.first(where: {
-            guard $0.parent == id, $0.noFolderWrite == (entry.state == .excluded), case .text(let text) = $0.payload else { return false }
+            guard $0.parent == id, $0.noFolderWrite == excluded, case .text(let text) = $0.payload else { return false }
             return text.leftURL == leftURL && text.rightURL == rightURL
         }) {
             active = match.id
         } else {
-            makeText(left: leftURL, right: rightURL, leftMissing: entry.left == nil, rightMissing: entry.right == nil, parent: id, folder: folder, relativePath: entry.path, excluded: entry.state == .excluded)
+            makeText(left: leftURL, right: rightURL, leftMissing: leftEntry.left == nil, rightMissing: rightEntry.right == nil,
+                     parent: id, folder: folder, relativePaths: [leftEntry.path, rightEntry.path], excluded: excluded)
         }
     }
 
@@ -787,7 +798,7 @@ final class Workspace: ObservableObject {
     private func snapshot(_ tab: Tab) -> SessionRecord {
         switch tab.payload {
         case .folders(let folder):
-            return SessionRecord(id: tab.id, name: tab.name, kind: .folders, left: folder.left.map(SavedPath.init), right: folder.right.map(SavedPath.init), rules: folder.rules, folderFilter: folder.filter.rawValue, folderStructure: folder.structure.rawValue, showExcluded: folder.showExcluded, expansion: folder.expanded, selection: folder.selection, folderSelectionScope: folder.selectionScope, folderWriteProtected: folder.writeProtected)
+            return SessionRecord(id: tab.id, name: tab.name, kind: .folders, left: folder.left.map(SavedPath.init), right: folder.right.map(SavedPath.init), rules: folder.rules, folderFilter: folder.filter.rawValue, folderStructure: folder.structure.rawValue, showExcluded: folder.showExcluded, expansion: folder.expanded, selection: folder.selection, folderSelectionScope: folder.selectionScope, folderSelectedSides: folder.selectedSides.isEmpty ? nil : folder.selectedSides, folderWriteProtected: folder.writeProtected)
         case .text(let model):
             let left = model.leftURL.map(SavedPath.init)
             let right = model.rightURL.map(SavedPath.init)

@@ -165,7 +165,9 @@ struct FolderView: View {
     @ViewBuilder private var itemCommands: some View {
         ComparisonToolMenu(title: L("Copy", "复制"), symbol: "arrow.left.arrow.right.square", ink: TandemDiffStyle.accent, help: L("Preview a directional copy", "预览向左或向右复制")) {
             Button { session.prepare(.right) } label: { Label(CopyDirection.right.label, systemImage: "arrowshape.right.fill") }
+                .disabled(!session.canPreview(.right))
             Button { session.prepare(.left) } label: { Label(CopyDirection.left.label, systemImage: "arrowshape.left.fill") }
+                .disabled(!session.canPreview(.left))
         }.disabled(!session.canPreview(ids: session.selection))
         let allFolders = session.selectedDirectories.isEmpty
         ComparisonToolButton(L("Expand", "展开"), "arrow.up.left.and.arrow.down.right", ink: TextCommandInk.secondary, help: allFolders ? L("Expand all folders", "展开全部文件夹") : L("Expand selected folders", "展开所选文件夹")) {
@@ -300,7 +302,7 @@ struct FolderView: View {
                     Label(row.entry.state.label, systemImage: row.entry.state.symbol)
                         .font(.callout)
                         .foregroundStyle(statusColor(row.entry.state))
-                        .background(FolderRowBackground(striped: useStripes && row.striped, selection: session.selection.contains(row.id) ? session.selectionScope : nil))
+                        .background(FolderRowBackground(striped: useStripes && row.striped, selection: session.selectionScope(for: row.id)))
                         .help(row.entry.diagnostic.localized)
                         .accessibilityHint(row.entry.diagnostic.localized)
                 }
@@ -334,7 +336,8 @@ struct FolderView: View {
             }
             .background(FolderTableInput(session: session, compare: requestContentCompare))
             .onKeyPress(.return) {
-                guard session.complete, !session.copying, session.selection.count == 1 else { return .ignored }
+                guard session.complete, !session.copying,
+                      session.selection.count == 1 || session.selectedPair?.canCompareText == true else { return .ignored }
                 session.openSelected()
                 return .handled
             }
@@ -416,7 +419,7 @@ struct FolderView: View {
             }
             .padding(.leading, CGFloat(row.level) * 12)
             .help(url.path)
-            .accessibilityAddTraits(session.selection.contains(row.id) && (session.selectionScope.side == nil || session.selectionScope.side == (onLeft ? .left : .right)) ? .isSelected : [])
+            .accessibilityAddTraits(session.selectionScope(for: row.id)?.includes(onLeft ? .left : .right) == true ? .isSelected : [])
         }
     }
 

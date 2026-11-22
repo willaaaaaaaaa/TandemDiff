@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Command-click items on opposite sides of Folder Compare to compare two text files directly or set two folders as the comparison roots, even when their names differ.
+
 ## 0.1.0 (2026-11-22)
 
 ### Added

@@ -100,6 +100,15 @@ enum FolderSelectionScope: String, Codable {
         case .both, .all: nil
         }
     }
+
+    func includes(_ side: TextSide) -> Bool { self.side == nil || self.side == side }
+
+    func available(in entry: FolderEntry) -> Self? {
+        let left = includes(.left) && entry.left != nil
+        let right = includes(.right) && entry.right != nil
+        guard left || right else { return nil }
+        return left && right ? .both : (left ? .left : .right)
+    }
 }
 
 enum CopyDirection {
@@ -168,12 +177,70 @@ final class FolderSession: ObservableObject {
     @Published var selection = Set<Data>() {
         didSet {
             guard selection != oldValue else { return }
+            clearSelectedSides()
             if explicitSelectAll { selectionScope = .both }
             invalidatePreview()
         }
     }
-    @Published var selectionScope: FolderSelectionScope = .both
+    @Published var selectionScope: FolderSelectionScope = .both {
+        didSet { clearSelectedSides() }
+    }
+    @Published private(set) var selectedSides: [Data: FolderSelectionScope] = [:]
+    var pairScrollOrigin: NSPoint?
+    var readTableScrollOrigin: (() -> NSPoint?)?
     var explicitSelectAll: Bool { selectionScope == .all }
+
+    func selectionScope(for id: Data) -> FolderSelectionScope? {
+        guard selection.contains(id) else { return nil }
+        return selectedSides[id] ?? selectionScope
+    }
+
+    func toggleSelectedSide(_ side: TextSide, of entry: FolderEntry, extending nativeSelection: Set<Data>) {
+        var sides = selectedSides
+        if sides.isEmpty {
+            for row in rows where nativeSelection.contains(row.id) {
+                sides[row.id] = selectionScope.available(in: row.entry)
+            }
+        }
+        switch sides[entry.id] {
+        case nil: sides[entry.id] = FolderSelectionScope(side: side)
+        case .both, .all: sides[entry.id] = FolderSelectionScope(side: side.other)
+        case .left, .right: sides[entry.id] = sides[entry.id]?.side == side ? nil : .both
+        }
+        selection = Set(sides.keys)
+        selectedSides = sides
+        invalidatePreview()
+    }
+
+    private func clearSelectedSides() {
+        guard !selectedSides.isEmpty else { return }
+        selectedSides = [:]
+        pairScrollOrigin = nil
+        invalidatePreview()
+    }
+
+    private func keepVisibleSelection() {
+        if selectedSides.isEmpty {
+            selection.formIntersection(rows.map(\.id))
+        } else {
+            let sides = Dictionary(uniqueKeysWithValues: rows.compactMap { row -> (Data, FolderSelectionScope)? in
+                guard let scope = selectedSides[row.id]?.available(in: row.entry) else { return nil }
+                return (row.id, scope)
+            })
+            selection = Set(sides.keys)
+            selectedSides = sides
+        }
+    }
+
+    var selectedPair: FolderSelectionPair? {
+        guard !selectedSides.isEmpty, selectedSides.count <= 2 else { return nil }
+        let entries = rows.filter { selectedSides[$0.id] != nil }.map(\.entry)
+        let left = entries.filter { selectedSides[$0.id]?.includes(.left) == true }
+        let right = entries.filter { selectedSides[$0.id]?.includes(.right) == true }
+        guard entries.count == selectedSides.count, left.count == 1, right.count == 1,
+              let left = left.first, let right = right.first else { return nil }
+        return FolderSelectionPair(left: left, right: right)
+    }
 
     @Published private(set) var entries: [FolderEntry] = [] { didSet { cachedRows = nil; cachedCounts = nil } }
     @Published private(set) var writeProtected = false
@@ -198,6 +265,7 @@ final class FolderSession: ObservableObject {
 
     let registry: EditRegistry
     var onOpen: ((FolderEntry) -> Void)?
+    var onOpenPair: ((FolderEntry, FolderEntry) -> Void)?
     var onChange: (() -> Void)?
     var onRecent: (([URL]) -> Void)?
     var onProtectChildren: ((Bool) async -> Bool)?
@@ -263,11 +331,18 @@ final class FolderSession: ObservableObject {
         if let side {
             setRoot(entry.url(on: side), onLeft: side == .left, expected: side == .left ? entry.leftVersion : entry.rightVersion)
         } else if let newLeft = entry.left, let newRight = entry.right {
-            setRootPair(newLeft, newRight, expected: entry)
+            setRootPair(newLeft, newRight, expectedLeft: entry.leftVersion, expectedRight: entry.rightVersion)
         }
     }
 
-    func setRootPair(_ newLeft: URL, _ newRight: URL, expected: FolderEntry? = nil) {
+    func useSelectedFoldersAsRoots() {
+        guard complete, !copying, let pair = selectedPair, pair.canUseAsRoots,
+              let left, let right, let newLeft = pair.left.left, let newRight = pair.right.right else { return }
+        guard rootsAreCurrent(left, right) else { refresh(); return }
+        setRootPair(newLeft, newRight, expectedLeft: pair.left.leftVersion, expectedRight: pair.right.rightVersion)
+    }
+
+    func setRootPair(_ newLeft: URL, _ newRight: URL, expectedLeft: FileVersion? = nil, expectedRight: FileVersion? = nil) {
         guard !copying else { return }
         do {
             try validateFolder(newLeft)
@@ -277,7 +352,8 @@ final class FolderSession: ObservableObject {
             return
         }
         guard let first = RootIdentity(newLeft), let second = RootIdentity(newRight),
-              expected.map({ first.matches($0.leftVersion) && second.matches($0.rightVersion) }) ?? true else {
+              expectedLeft.map({ first.matches($0) }) ?? true,
+              expectedRight.map({ second.matches($0) }) ?? true else {
             refresh()
             noticeMessage = .init("The folder changed. Review the refreshed comparison.", "目录已变化，请查看刷新后的比较结果。")
             return
@@ -391,7 +467,7 @@ final class FolderSession: ObservableObject {
     private func updateVisibleSelection() {
         cachedRows = nil
         invalidatePreview()
-        selection.formIntersection(rows.map(\.id))
+        keepVisibleSelection()
     }
 
     private func flatten(_ entries: [FolderEntry]) -> [FolderEntry] {
@@ -450,6 +526,7 @@ final class FolderSession: ObservableObject {
     }
 
     private func rootsChanged(recent: [URL]) {
+        pairScrollOrigin = nil
         expanded = []
         selection = []
         selectionScope = .both
@@ -466,6 +543,7 @@ final class FolderSession: ObservableObject {
         expanded = record.expansion ?? []
         selection = record.selection ?? []
         selectionScope = record.folderSelectionScope ?? .both
+        selectedSides = record.folderSelectedSides?.filter { selection.contains($0.key) } ?? [:]
         writeProtected = record.folderWriteProtected ?? false
     }
 
@@ -613,10 +691,11 @@ final class FolderSession: ObservableObject {
     }
 
     private func restoreVisibleSelection() {
+        let individuallySelected = !selectedSides.isEmpty
         let selectionAnchor = selection.first.flatMap { String(data: $0, encoding: .utf8) }
+        keepVisibleSelection()
+        guard !individuallySelected, selection.isEmpty, var ancestor = selectionAnchor else { return }
         let available = Set(rows.map(\.id))
-        selection.formIntersection(available)
-        guard selection.isEmpty, var ancestor = selectionAnchor else { return }
         while !ancestor.isEmpty {
             let key = Data(ancestor.utf8)
             if available.contains(key) {
@@ -669,8 +748,19 @@ final class FolderSession: ObservableObject {
     }
 
     func openSelected() {
+        if selectedPair?.canCompareText == true {
+            openSelectedPair()
+            return
+        }
         guard selection.count == 1 else { return }
         openItems(ids: selection)
+    }
+
+    func openSelectedPair() {
+        guard complete, !copying, let pair = selectedPair, pair.canCompareText, let left, let right else { return }
+        guard rootsAreCurrent(left, right) else { refresh(); return }
+        pairScrollOrigin = readTableScrollOrigin?()
+        onOpenPair?(pair.left, pair.right)
     }
 
     func openItems(ids: Set<Data>) {
@@ -688,7 +778,7 @@ final class FolderSession: ObservableObject {
     func toggle(_ id: Data) {
         guard structure != .flatList else { return }
         if expanded.remove(id) == nil { expanded.insert(id) }
-        else { selection.formIntersection(rows.map(\.id)) }
+        else { keepVisibleSelection() }
     }
 
     var selectedDirectories: [FolderEntry] {
@@ -711,7 +801,7 @@ final class FolderSession: ObservableObject {
         if expand { expanded.formUnion(ids) }
         else {
             expanded.subtract(ids)
-            selection.formIntersection(rows.map(\.id))
+            keepVisibleSelection()
         }
     }
 
@@ -728,8 +818,16 @@ final class FolderSession: ObservableObject {
     }
 
     func canPreview(ids: Set<Data>) -> Bool {
-        complete && !writeProtected && !copying && !preparing && !ids.isEmpty &&
-            rows.contains { ids.contains($0.id) }
+        complete && !writeProtected && !copying && !preparing && !ids.isEmpty && rows.contains { ids.contains($0.id) }
+    }
+
+    func canPreview(_ direction: CopyDirection, ids: Set<Data>? = nil) -> Bool {
+        canPreview(ids: copySources(ids ?? selection, direction: direction))
+    }
+
+    private func copySources(_ ids: Set<Data>, direction: CopyDirection) -> Set<Data> {
+        guard !selectedSides.isEmpty else { return ids }
+        return ids.filter { selectedSides[$0]?.includes(direction == .right ? .left : .right) == true }
     }
 
     func setWriteProtection(_ value: Bool) async {
@@ -750,14 +848,15 @@ final class FolderSession: ObservableObject {
     }
 
     func prepare(_ direction: CopyDirection, selectedIDs: Set<Data>? = nil) {
-        guard let left, let right, canPreview(ids: selectedIDs ?? selection) else { return }
+        let sourceIDs = copySources(selectedIDs ?? selection, direction: direction)
+        guard let left, let right, canPreview(ids: sourceIDs) else { return }
         guard rootsAreCurrent(left, right) else { refresh(); return }
         let sourceRoot = direction == .right ? left : right
         let targetRoot = direction == .right ? right : left
         let generation = generation
         let filter = filter
         let modelSelection = selection
-        let selection = (selectedIDs ?? modelSelection).intersection(self.rows.map(\.id))
+        let selection = sourceIDs.intersection(self.rows.map(\.id))
         let selected = allEntries.filter { selection.contains($0.id) }
         let targets = selected.filter(\.isDirectory).map { Data(($0.path + "/").utf8) }
         let picked = allEntries.filter { entry in

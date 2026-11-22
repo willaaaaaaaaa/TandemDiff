@@ -20,8 +20,20 @@ struct FolderTableInput: NSViewRepresentable {
                 return window.isKeyWindow && handleSelectionKey(event, responder: window.firstResponder)
             }
             if event.type == .leftMouseDown && !event.modifierFlags.contains(.control) {
-                if let hit = tableHit(for: event) {
-                    input?.session.selectionScope = FolderSelectionScope(side: hit.side)
+                if let input, let hit = tableHit(for: event) {
+                    let modifiers = event.modifierFlags.intersection([.command, .shift, .option])
+                    if modifiers == .command, let side = hit.side {
+                        let rows = input.session.rows
+                        let entry = rows[hit.row].entry
+                        guard entry.url(on: side) != nil else { return true }
+                        let selectedIDs = Set(hit.table.selectedRowIndexes.map { rows[$0].id })
+                        input.session.toggleSelectedSide(side, of: entry, extending: selectedIDs)
+                        let selection = input.session.selection
+                        hit.table.selectRowIndexes(IndexSet(rows.indices.filter { selection.contains(rows[$0].id) }), byExtendingSelection: false)
+                        window.makeFirstResponder(hit.table)
+                        return true
+                    }
+                    input.session.selectionScope = FolderSelectionScope(side: hit.side)
                 }
                 return false
             }
@@ -63,11 +75,16 @@ struct FolderTableInput: NSViewRepresentable {
                   event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control)),
                   let hit = tableHit(for: event) else { return nil }
             let table = hit.table
+            let rows = input.session.rows
+            let id = rows[hit.row].id
+            if let scope = input.session.selectedSides[id], hit.side.map(scope.includes) ?? true {
+                let menu = FolderContextMenu(session: input.session, ids: input.session.selection, side: nil, compare: input.compare)
+                return (table, menu.nativeMenu())
+            }
             let wasSelected = table.selectedRowIndexes.contains(hit.row)
-            if !wasSelected {
+            if !wasSelected || !input.session.selectedSides.isEmpty {
                 table.selectRowIndexes(IndexSet(integer: hit.row), byExtendingSelection: false)
             }
-            let rows = input.session.rows
             let ids = Set(table.selectedRowIndexes.map { rows[$0].id })
             guard !ids.isEmpty else { return nil }
             let preserveAll = wasSelected && input.session.isAllVisibleSelection(count: ids.count)
@@ -82,18 +99,44 @@ struct FolderTableInput: NSViewRepresentable {
         }
 
         private func tableHit(for event: NSEvent) -> (table: NSTableView, row: Int, side: TextSide?)? {
-            guard let input, let window, event.window === window,
-                  bounds.contains(convert(event.locationInWindow, from: nil)), let content = window.contentView else { return nil }
-            let point = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
-            guard let table = ancestorTable(of: content.hitTest(point)) else { return nil }
+            guard let input, event.window === window, bounds.contains(convert(event.locationInWindow, from: nil)),
+                  let table = table(at: event.locationInWindow) else { return nil }
             let location = table.convert(event.locationInWindow, from: nil)
             let row = table.row(at: location)
             guard input.session.rows.indices.contains(row), table.numberOfRows == input.session.rows.count else { return nil }
+            trackScrollView(table, in: input.session)
             switch table.column(at: location) {
             case 0...2: return (table, row, .left)
             case 4...6: return (table, row, .right)
             default: return (table, row, nil)
             }
+        }
+
+        func connectScrollView() {
+            guard let session = input?.session, let table = table(at: convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil)),
+                  let scrollView = table.enclosingScrollView else { return }
+            trackScrollView(table, in: session)
+            if let origin = session.pairScrollOrigin {
+                session.pairScrollOrigin = nil
+                scrollView.contentView.scroll(to: origin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
+
+        private func trackScrollView(_ table: NSTableView, in session: FolderSession) {
+            session.readTableScrollOrigin = { [weak scrollView = table.enclosingScrollView] in scrollView?.contentView.bounds.origin }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            DispatchQueue.main.async { [weak self] in self?.connectScrollView() }
+        }
+
+        private func table(at location: NSPoint) -> NSTableView? {
+            guard let content = window?.contentView else { return nil }
+            let point = content.superview?.convert(location, from: nil) ?? location
+            return ancestorTable(of: content.hitTest(point))
         }
 
         private func ancestorTable(of view: NSView?) -> NSTableView? {
