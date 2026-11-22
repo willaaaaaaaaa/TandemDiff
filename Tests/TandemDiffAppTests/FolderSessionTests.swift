@@ -722,7 +722,9 @@ final class FolderSessionTests: XCTestCase {
             let returnedTable = try showFolder()
             let restored = try XCTUnwrap(returnedTable.enclosingScrollView)
             try await waitUntil { abs(restored.contentView.bounds.origin.y - before) < 1 }
-            XCTAssertEqual(returnedTable.selectedRowIndexes.count, 2)
+            try await waitUntil { returnedTable.selectedRowIndexes.count == 2 }
+            let expectedRows = IndexSet(session.rows.indices.filter { session.selection.contains(session.rows[$0].id) })
+            XCTAssertEqual(returnedTable.selectedRowIndexes, expectedRows)
         }
     }
 
