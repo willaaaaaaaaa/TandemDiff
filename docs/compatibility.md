@@ -28,6 +28,13 @@ xcrun vtool -arch x86_64 -show-build "$bin"
 
 The expected architectures are `arm64` and `x86_64`, with `minos 14.0` on both slices. Launch the bundle to check runtime behavior on the test Mac. When reporting a compatibility issue, include the source revision, macOS version, CPU, and the steps that reproduce it with disposable files. See the [acceptance checks](acceptance.md).
 
+## Prepare release notes
+
+1. Review the entries under [Unreleased](../CHANGELOG.md#unreleased). Combine duplicates and keep one bullet per user-visible change. Use headings such as `Added`, `Changed`, and `Fixed` when they have entries.
+2. Before tagging a release, check the app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in the [build script](../script/build_and_run.sh). Confirm the built app’s `Contents/Info.plist` contains those values.
+3. Rename the completed section to `X.Y.Z (YYYY-MM-DD)` using the app version and the release date. Keep released versions in descending order and use the matching `vX.Y.Z` tag.
+4. Use that section as the GitHub Release description. Keep a fresh `Unreleased` heading at the top for the next change.
+
 ## Distributing a binary
 
 The build script ad hoc signs the local app. For a downloadable macOS release, build from the tagged source and sign with Developer ID. After notarization, staple the ticket to the app or disk image. If distributing a ZIP, create the final archive from the stapled app. Check a fresh download through Gatekeeper, publish its checksum, and identify the macOS version and CPU used for runtime checks in the release notes. [Apple’s notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)

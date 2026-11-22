@@ -1,6 +1,6 @@
 # TandemDiff
 
-[简体中文](README.zh-CN.md) · [Build from source](#build-from-source)
+[简体中文](README.zh-CN.md) · [Build from source](#build-from-source) · [Changelog](CHANGELOG.md)
 
 TandemDiff is a native Mac app for comparing two copies of a folder or text file. Find the files that changed, open a pair side by side, and bring across just the edits you want to keep. Comparisons run locally.
 

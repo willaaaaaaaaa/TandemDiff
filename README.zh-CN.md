@@ -1,6 +1,6 @@
 # TandemDiff
 
-[English](README.md) · [从源码运行](#从源码运行)
+[English](README.md) · [从源码运行](#从源码运行) · [更新日志](CHANGELOG.md)
 
 TandemDiff 是一款原生 Mac 文件比较工具。把同一项目的两个版本并排打开，先找出哪些文件变了，再点进文件查看具体改动，只把想保留的部分合到另一侧。整个比较过程都在本机完成。
 
