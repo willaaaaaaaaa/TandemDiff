@@ -292,6 +292,7 @@ final class FolderSession: ObservableObject {
 
     private var leftIdentity: RootIdentity?
     private var rightIdentity: RootIdentity?
+    private let observesFileChanges: Bool
     private var folderEvents: FolderEvents?
     private var observedPaths = [String]()
     private var scanTask: Task<Void, Never>?
@@ -302,10 +303,11 @@ final class FolderSession: ObservableObject {
     private var cachedCounts: [FolderState: Int]?
     private var closed = false
 
-    init(left: URL?, right: URL?, registry: EditRegistry, defaults: FolderSessionDefaults = FolderSessionDefaults()) {
+    init(left: URL?, right: URL?, registry: EditRegistry, defaults: FolderSessionDefaults = FolderSessionDefaults(), observesFileChanges: Bool = true) {
         self.left = left
         self.right = right
         self.registry = registry
+        self.observesFileChanges = observesFileChanges
         rules = defaults.rules
         filter = defaults.filter
         structure = defaults.structure ?? .compareFolders
@@ -597,6 +599,7 @@ final class FolderSession: ObservableObject {
     }
 
     private func watchRoots(_ urls: [URL]) {
+        guard observesFileChanges else { return }
         let paths = urls.compactMap { url -> String? in
             guard (try? LocalAccess.validate(url)) != nil else { return nil }
             return try? LocalAccess.canonicalURL(url).path

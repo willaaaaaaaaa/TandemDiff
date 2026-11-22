@@ -4,8 +4,9 @@
 | --- | --- |
 | Deployment target | macOS 14.0 or later |
 | Local build | The build script defaults to a debug app for the build Mac. Pass `--universal --build-only` for a release build containing arm64 and x86_64. |
-| Native runtime check | Apple M5 (arm64), macOS 27.0.1 (26A434), Xcode 27.2 |
-| Other environments | Native execution on an Intel Mac and execution on macOS 14 have yet to be verified. Reports from other Macs are welcome. |
+| Local runtime check | Apple M5 (arm64), macOS 27.0.1 (26A434), Xcode 27.2 |
+| GitHub-hosted CI | The Swift test suite passed on Apple silicon (macOS 15) and Intel (macOS 26). The Apple silicon job also built the Universal app and checked its signature and both CPU architectures. [CI run](https://github.com/willaaaaaaaaa/TandemDiff/actions/runs/44920419448) |
+| Open runtime checks | Interactive use on an Intel Mac and running TandemDiff on macOS 14. Reports from either environment are welcome. |
 | Input storage | Local APFS. Copy inputs out of network shares and cloud-managed folders before comparing them. |
 
 The minimum OS comes from the [package manifest](../Package.swift) and the app bundle. A Mac must run a compatible macOS version and have a CPU architecture included in the build. The project uses Apple frameworks and has no external Swift package dependencies.
@@ -26,6 +27,13 @@ xcrun vtool -arch x86_64 -show-build "$bin"
 ```
 
 The expected architectures are `arm64` and `x86_64`, with `minos 14.0` on both slices. Launch the bundle to check runtime behavior on the test Mac. When reporting a compatibility issue, include the source revision, macOS version, CPU, and the steps that reproduce it with disposable files. See the [acceptance checks](acceptance.md).
+
+## Prepare release notes
+
+1. Review the entries under [Unreleased](../CHANGELOG.md#unreleased). Combine duplicates and keep one bullet per user-visible change. Use headings such as `Added`, `Changed`, and `Fixed` when they have entries.
+2. Before tagging a release, check the app version (`CFBundleShortVersionString`) and build number (`CFBundleVersion`) in the [build script](../script/build_and_run.sh). Confirm the built app’s `Contents/Info.plist` contains those values.
+3. Rename the completed section to `X.Y.Z (YYYY-MM-DD)` using the app version and the release date. Keep released versions in descending order and use the matching `vX.Y.Z` tag.
+4. Use that section as the GitHub Release description. Keep a fresh `Unreleased` heading at the top for the next change.
 
 ## Distributing a binary
 

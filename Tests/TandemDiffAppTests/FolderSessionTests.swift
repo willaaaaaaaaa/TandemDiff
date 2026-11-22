@@ -222,7 +222,7 @@ final class FolderSessionTests: XCTestCase {
                 try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try Data("content".utf8).write(to: file)
             }
-            let folder = FolderSession(left: left, right: right, registry: EditRegistry())
+            let folder = FolderSession(left: left, right: right, registry: EditRegistry(), observesFileChanges: false)
             folder.applyRules(NameRules(quickExpression: "-agents/"))
             try await waitUntil { folder.complete }
             let src = Data("src".utf8)
@@ -266,7 +266,7 @@ final class FolderSessionTests: XCTestCase {
                 try FileManager.default.createDirectory(at: root.appendingPathComponent("empty"), withIntermediateDirectories: true)
             }
             try write("hidden", to: "cache/nested/index.txt", in: left)
-            let folder = FolderSession(left: left, right: right, registry: EditRegistry())
+            let folder = FolderSession(left: left, right: right, registry: EditRegistry(), observesFileChanges: false)
             folder.applyRules(NameRules(quickExpression: "-cache/"))
             try await waitUntil { folder.complete }
             folder.toggle(Data("docs".utf8))
@@ -339,7 +339,7 @@ final class FolderSessionTests: XCTestCase {
             try write("copy", to: "src/live.txt", in: left)
             try write("secret", to: "src/private/key.txt", in: left)
             try write("other", to: "other/inner.txt", in: right)
-            let folder = FolderSession(left: left, right: right, registry: EditRegistry())
+            let folder = FolderSession(left: left, right: right, registry: EditRegistry(), observesFileChanges: false)
             folder.applyRules(NameRules(quickExpression: "-private/"))
             try await waitUntil { folder.complete }
             let src = Data("src".utf8)

@@ -1,6 +1,6 @@
 # TandemDiff
 
-[English](README.md) · [从源码运行](#从源码运行)
+[English](README.md) · [从源码运行](#从源码运行) · [更新日志](CHANGELOG.md)
 
 TandemDiff 是一款原生 Mac 文件比较工具。把同一项目的两个版本并排打开，先找出哪些文件变了，再点进文件查看具体改动，只把想保留的部分合到另一侧。整个比较过程都在本机完成。
 
@@ -42,7 +42,9 @@ swift test
 | 项目 | 范围 |
 | --- | --- |
 | 构建目标 | macOS 14.0 起。通用构建包含 Apple 芯片和 Intel 两种架构。 |
-| 本机实测 | Apple M5、macOS 27.0.1、Xcode 27.2。Intel 实机和 macOS 14 的运行情况仍待验证。 |
+| 本机实测 | Apple M5、macOS 27.0.1、Xcode 27.2。 |
+| 自动化测试 | Swift 测试已在 GitHub 托管的 Apple 芯片（macOS 15）和 Intel（macOS 26）环境中通过。 |
+| 待验证 | Intel Mac 上的桌面交互，以及 TandemDiff 在 macOS 14 上的运行情况。 |
 | 输入 | 本地 APFS 目录。编辑器支持 UTF-8 和带 BOM 的 UTF-16，每侧上限为 16 MiB、20 万个逻辑行。两边都有的二进制文件会标为**未比较**。 |
 | 界面 | 支持简体中文、英文及浅色、深色外观，可在 **TandemDiff → 设置**中切换。 |
 
@@ -50,7 +52,7 @@ swift test
 
 ## 参与项目
 
-报告比较问题时，请附上能复现问题的最小示例文件、预期结果、macOS 版本和 Mac 芯片型号。修改比较逻辑后，可以运行 `swift test`。[设计说明](docs/design.md)记录了比较和写入规则，[验收用例](docs/acceptance.md)提供了可复现的场景。
+报告比较问题时，请附上能复现问题的最小示例文件、预期结果、macOS 版本和 Mac 芯片型号。[开发指南](AGENTS.md)列出了源码模块和各类改动的验证方法。[设计说明](docs/design.md)记录了比较和写入规则，[验收用例](docs/acceptance.md)提供了可复现的场景。
 
 ## 许可证
 

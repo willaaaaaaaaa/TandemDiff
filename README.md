@@ -1,6 +1,6 @@
 # TandemDiff
 
-[简体中文](README.zh-CN.md) · [Build from source](#build-from-source)
+[简体中文](README.zh-CN.md) · [Build from source](#build-from-source) · [Changelog](CHANGELOG.md)
 
 TandemDiff is a native Mac app for comparing two copies of a folder or text file. Find the files that changed, open a pair side by side, and bring across just the edits you want to keep. Comparisons run locally.
 
@@ -42,7 +42,9 @@ swift test
 | | Support |
 | --- | --- |
 | Build target | macOS 14.0 or later. The Universal build includes Apple silicon and Intel. |
-| Tested locally | Apple M5, macOS 27.0.1, Xcode 27.2. Intel hardware and macOS 14 runtime checks are still open. |
+| Tested locally | Apple M5, macOS 27.0.1, Xcode 27.2. |
+| Automated tests | The Swift test suite passed on GitHub-hosted Apple silicon (macOS 15) and Intel (macOS 26) runners. |
+| Still to verify | Interactive use on an Intel Mac and running TandemDiff on macOS 14. |
 | Inputs | Local APFS folders. The editor accepts UTF-8 and BOM-tagged UTF-16, up to 16 MiB and 200,000 logical lines per side. Paired binary files are listed as **Not compared**. |
 | Interface | English and Simplified Chinese, with light and dark appearances. Change either in **TandemDiff → Settings**. |
 
@@ -50,7 +52,7 @@ Local builds use an ad hoc signature. See [compatibility and distribution](docs/
 
 ## Contributing
 
-For a comparison bug, include the smallest pair of sample files that shows it, the result you expected, your macOS version, and your Mac’s CPU. Run `swift test` when changing comparison behavior. The [design](docs/design.md) explains the comparison and write rules, and the [acceptance checks](docs/acceptance.md) include cases you can reproduce.
+For a comparison bug, include the smallest pair of sample files that shows it, the result you expected, your macOS version, and your Mac’s CPU. The [development guide](AGENTS.md) lists the source modules and the checks to run for each kind of change. The [design](docs/design.md) explains the comparison and write rules, and the [acceptance checks](docs/acceptance.md) include cases you can reproduce.
 
 ## License
 
