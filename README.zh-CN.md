@@ -1,6 +1,6 @@
 # TandemDiff
 
-[English](README.md) · [从源码运行](#从源码运行) · [更新日志](CHANGELOG.md)
+[English](README.md) · [下载安装包](https://github.com/willaaaaaaaaa/TandemDiff/releases/latest) · [从源码运行](#从源码运行) · [更新日志](CHANGELOG.md)
 
 TandemDiff 是一款原生 Mac 文件比较工具。把同一项目的两个版本并排打开，先找出哪些文件变了，再点进文件查看具体改动，只把想保留的部分合到另一侧。整个比较过程都在本机完成。
 
@@ -26,7 +26,7 @@ TandemDiff 是一款原生 Mac 文件比较工具。把同一项目的两个版�
 
 ## 从源码运行
 
-准备一台已安装 Xcode 和 macOS SDK 的 Mac。项目声明的 Swift 工具版本是 5.10。在仓库根目录执行以下命令。
+不想自行构建时，可从 [GitHub Releases](https://github.com/willaaaaaaaaa/TandemDiff/releases/latest) 下载最新的通用版安装包。要从源码构建，准备一台已安装 Xcode 和 macOS SDK 的 Mac。项目声明的 Swift 工具版本是 5.10。在仓库根目录执行以下命令。
 
 ```sh
 ./script/build_and_run.sh

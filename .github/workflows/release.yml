@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build and verify the Universal app
+        run: |
+          ./script/build_and_run.sh --universal --build-only
+          app=dist/TandemDiff.app
+          bin="$app/Contents/MacOS/TandemDiff"
+          codesign --verify --strict --verbose=2 "$app"
+          for cpu in arm64 x86_64; do
+            lipo "$bin" -verify_arch "$cpu"
+            xcrun vtool -arch "$cpu" -show-build "$bin" | grep -q 'minos 14.0'
+          done
+          version="${GITHUB_REF_NAME#v}"
+          app_version="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
+          test "$version" = "$app_version"
+      - name: Package the app and the release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          asset="TandemDiff-$version-universal-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/TandemDiff.app "$asset"
+          shasum -a 256 "$asset" > "$asset.sha256"
+          awk -v ver="$version" 'BEGIN{printing=0} /^## /{printing = (index($0, "## " ver " (") == 1)} printing' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+          printf '\nThe ZIP holds a Universal build (arm64 and x86_64) for macOS 14.0 or later, built from this tag and ad hoc signed.\n' >> release-notes.md
+          printf 'To open a fresh download the first time, right-click TandemDiff.app and choose Open.\n' >> release-notes.md
+          printf 'The attached `.sha256` file lists the archive checksum.\n' >> release-notes.md
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          asset="TandemDiff-$version-universal-macos.zip"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"; then
+            gh release upload "$GITHUB_REF_NAME" "$asset" "$asset.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" "$asset" "$asset.sha256" --title "TandemDiff $version" --notes-file release-notes.md --repo "$GITHUB_REPOSITORY"
+          fi
