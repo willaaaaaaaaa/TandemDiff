@@ -28,7 +28,7 @@ struct FolderContextMenu {
         let pair = ids == session.selection ? session.selectedPair : nil
         var open: [Item] = []
         if pair?.canCompareText == true {
-            open.append(Item(L("Compare Selected Files", "比较所选文件"), enabled: ready) { session.openSelectedPair() })
+            open.append(Item(L("Compare Selected Files", "比较所选文件"), enabled: session.openableTextPair != nil) { session.openSelectedPair() })
         }
         open.append(Item(L("Compare Contents", "比较内容"), enabled: ready && !session.preparing) { compare(ids) })
         if individualSides.isEmpty && !allVisible && entries.allSatisfy(\.canOpenAsText) {

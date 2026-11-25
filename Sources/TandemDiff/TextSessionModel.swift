@@ -130,7 +130,8 @@ final class TextSessionModel: ObservableObject {
     var hiddenCount = 0
     private var comparisonNotice: DiagnosticText?
 
-    init(left: URL?, right: URL?, leftMissing: Bool = false, rightMissing: Bool = false, leftReadOnly: Bool = false, rightReadOnly: Bool = false, inheritedGuard: Bool = false, writer: FileWriter, onSaved: @escaping (URL) -> Void = { _ in }) {
+    init(left: URL?, right: URL?, leftMissing: Bool = false, rightMissing: Bool = false, leftReadOnly: Bool = false, rightReadOnly: Bool = false, inheritedGuard: Bool = false,
+         initialVersions: [TextSide: FileVersion] = [:], writer: FileWriter, onSaved: @escaping (URL) -> Void = { _ in }) {
         self.writer = writer
         self.onSaved = onSaved
         panes = [TextPane(url: left, missing: leftMissing, inspectionOnly: leftReadOnly), TextPane(url: right, missing: rightMissing, inspectionOnly: rightReadOnly)]
@@ -138,36 +139,46 @@ final class TextSessionModel: ObservableObject {
         let initialSides = TextSide.allCases.filter { pane($0).url != nil }
         for side in initialSides { pane(side).busy = true }
         if let left, let right { equivalentPanes = same(left, right) }
-        Task { await loadInitial(initialSides) }
+        Task { await loadInitial(initialSides, versions: initialVersions) }
     }
 
     deinit { job?.cancel() }
     func pane(_ side: TextSide) -> TextPane { panes[side.rawValue] }
 
-    private func loadInitial(_ sides: [TextSide]) async {
+    private func loadInitial(_ sides: [TextSide], versions: [TextSide: FileVersion]) async {
         for side in sides {
-            await load(side)
+            await load(side, expectedVersion: versions[side])
             let p = pane(side)
             if let url = p.url, p.baseline != nil { onFileAccessed(url) }
         }
-        if equivalentPanes { statusMessage = .init("Both panes refer to the same file. Open a different pair to edit.", "两侧引用同一文件。请打开不同的文件进行编辑。") }
+        if equivalentPanes && statusMessage == nil {
+            statusMessage = .init("Both panes refer to the same file. Open a different pair to edit.", "两侧引用同一文件。请打开不同的文件进行编辑。")
+        }
         compare()
     }
 
-    private func load(_ side: TextSide) async {
+    private func load(_ side: TextSide, expectedVersion: FileVersion? = nil) async {
         let p = pane(side)
         guard let url = p.url else { return }
         p.busy = true
         objectWillChange.send()
+        defer {
+            p.busy = false
+            objectWillChange.send()
+        }
         do {
             let (baseline, buffer) = try await readBuffer(url, expectedMissing: p.missing, root: p.root)
+            if let expectedVersion, baseline?.version != expectedVersion {
+                let message = DiagnosticText("The file changed before it opened. Review the folder results or reload the file.", "文件在打开前已变化，请查看目录结果或重新载入文件。")
+                p.error = message
+                statusMessage = message
+                return
+            }
             p.install(buffer, baseline: baseline, side: side)
         } catch {
             p.error = error.comparisonDiagnostic
             statusMessage = p.error
         }
-        p.busy = false
-        objectWillChange.send()
     }
 
     private func readBuffer(_ url: URL, expectedMissing: Bool, root: URL?) async throws -> (WriteBaseline?, TextBuffer) {

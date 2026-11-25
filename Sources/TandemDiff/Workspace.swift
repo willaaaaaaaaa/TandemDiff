@@ -470,9 +470,9 @@ final class Workspace: ObservableObject {
             guard let self, let folder else { return }
             self.openChild(entry, of: folder, id: id)
         }
-        folder.onOpenPair = { [weak self, weak folder] left, right in
+        folder.onOpenPair = { [weak self, weak folder] pair, initialVersions in
             guard let self, let folder else { return }
-            self.openChild(left: left, right: right, of: folder, id: id)
+            self.openChild(left: pair.left, right: pair.right, of: folder, id: id, initialVersions: initialVersions)
         }
         folder.onChange = { [weak self] in self?.objectWillChange.send() }
         folder.onRecent = { [weak self] roots in
@@ -513,7 +513,7 @@ final class Workspace: ObservableObject {
         left: URL? = nil, right: URL? = nil,
         leftMissing: Bool = false, rightMissing: Bool = false,
         parent: UUID? = nil, folder: FolderSession? = nil, relativePaths: [String] = [], excluded: Bool = false,
-        restoring: SessionRecord? = nil
+        restoring: SessionRecord? = nil, initialVersions: [TextSide: FileVersion] = [:]
     ) {
         let id = restoring?.id ?? UUID()
         if tabs.contains(where: { $0.id == id }) {
@@ -528,7 +528,7 @@ final class Workspace: ObservableObject {
         let model = TextSessionModel(
             left: left, right: right, leftMissing: leftMissing, rightMissing: rightMissing,
             leftReadOnly: leftDuplicate || permanentInspection, rightReadOnly: rightDuplicate || permanentInspection,
-            inheritedGuard: inheritedGuard, writer: registry.writer
+            inheritedGuard: inheritedGuard, initialVersions: initialVersions, writer: registry.writer
         ) { [weak self] url in
             self?.registry.diskChanged(url, excluding: id)
             self?.remember(id)
@@ -567,7 +567,8 @@ final class Workspace: ObservableObject {
         openChild(left: entry, right: entry, of: folder, id: id)
     }
 
-    private func openChild(left leftEntry: FolderEntry, right rightEntry: FolderEntry, of folder: FolderSession, id: UUID) {
+    private func openChild(left leftEntry: FolderEntry, right rightEntry: FolderEntry, of folder: FolderSession, id: UUID,
+                           initialVersions: [TextSide: FileVersion] = [:]) {
         guard let left = folder.left, let right = folder.right else { return }
         let leftURL = leftEntry.left ?? LocalAccess.appending(leftEntry.path, to: left)
         let rightURL = rightEntry.right ?? LocalAccess.appending(rightEntry.path, to: right)
@@ -579,7 +580,8 @@ final class Workspace: ObservableObject {
             active = match.id
         } else {
             makeText(left: leftURL, right: rightURL, leftMissing: leftEntry.left == nil, rightMissing: rightEntry.right == nil,
-                     parent: id, folder: folder, relativePaths: [leftEntry.path, rightEntry.path], excluded: excluded)
+                     parent: id, folder: folder, relativePaths: [leftEntry.path, rightEntry.path], excluded: excluded,
+                     initialVersions: initialVersions)
         }
     }
 
