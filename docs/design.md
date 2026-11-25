@@ -18,6 +18,8 @@ Home groups automatic comparisons by date and named sessions by session folder. 
 
 **Save Session** records the current paths and settings. For a folder comparison, it also records the expansion and selection. **Save Session As** makes an independent named record. Later navigation stays in the tab until the next save. Saved records store paths, preferences, and session metadata locally. Unsaved text lives in the editor. Reopening a saved comparison revalidates the inputs. A missing or replaced root requires a new selection. Defaults edited on Home apply to future sessions, and saved comparisons retain their settings. [Workspace and session storage](../Sources/TandemDiff/Workspace.swift)
 
+The session library uses the legacy `MarginDiff/sessions.json` path under macOS Application Support. Keeping this path lets TandemDiff find the same session library across app renames.
+
 Both comparisons offer **All**, **Differences**, and **Same** with Command-1, Command-2, and Command-3. Command-Option-Up Arrow and Down Arrow move between differences. The Comparison menu names the destination in directional commands, and **Swap Sides** changes which inputs the commands address. The interface has English and Simplified Chinese labels. [Comparison commands](../Sources/TandemDiff/TandemDiffApp.swift)
 
 ## Folder comparison
@@ -39,6 +41,8 @@ A bare glob matches a basename at any depth. A pattern containing an internal sl
 Open a paired text row to compare its two files. A supported unilateral file opens opposite a virtual empty side. An existing empty file stays bound to its actual path. The folder comparison continues to describe the files on disk while a child editor has unsaved changes. Saving or copying requests a refresh of affected comparisons. Returning from the editor preserves the available folder selection. [Workspace navigation](../Sources/TandemDiff/Workspace.swift)
 
 Command-click selects each item on its own side. With one supported text file selected on each side, **Compare Selected Files** opens the two selected paths in one child comparison. Returning to the folder view restores the selection and scroll position. With one eligible folder selected on each side, **Set as Base Folders on Both Sides** changes both roots together. **Back** restores the previous roots in one step. Both commands preserve the left and right sides. The folder table continues to match paths relative to its roots.
+
+While a scan or refresh is active, you can open a Command-clicked text pair with Return, **Open**, or **Compare Selected Files**. TandemDiff checks the selected paths against the current name rules and checks their versions against the displayed rows. It verifies those versions again when the editor reads the files. If a selected row is already stale, the folder view shows a notice. Copy previews and changes to both roots require a completed scan.
 
 ## Text comparison
 

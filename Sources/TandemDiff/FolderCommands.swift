@@ -42,9 +42,14 @@ extension FolderSession {
         selectedSides.isEmpty && count > 0 && count == rows.count && (count > 1 || explicitSelectAll)
     }
 
+    var openableTextPair: FolderSelectionPair? {
+        guard !copying, complete || scanning, let pair = selectedPair, pair.canCompareText else { return nil }
+        return pair
+    }
+
     func canOpenSelected(includingFolders: Bool) -> Bool {
+        if openableTextPair != nil { return true }
         guard complete, !copying else { return false }
-        if selectedPair?.canCompareText == true { return true }
         guard selection.count == 1, let id = selection.first,
               let entry = rows.first(where: { $0.id == id })?.entry else { return false }
         return entry.canOpenAsText || (includingFolders && !entry.children.isEmpty)

@@ -654,6 +654,114 @@ final class FolderSessionTests: XCTestCase {
         }
     }
 
+    func testCompareSelectedFilesOpensDuringFolderRefresh() async throws {
+        _ = NSApplication.shared
+        try await fixture { temp, left, right in
+            let leftFile = left.appendingPathComponent("left.md")
+            let rightFile = right.appendingPathComponent("right.md")
+            try write("left file", to: leftFile.lastPathComponent, in: left)
+            try write("right file", to: rightFile.lastPathComponent, in: right)
+            let workspace = Workspace(registry: EditRegistry(), library: SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json")))
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
+            let parent = try XCTUnwrap(workspace.current)
+            guard case .folders(let session) = parent.payload else { return XCTFail("Expected Folder Compare") }
+            try await waitUntil { session.complete }
+            let leftEntry = try XCTUnwrap(session.entries.first { $0.path == leftFile.lastPathComponent })
+            let rightEntry = try XCTUnwrap(session.entries.first { $0.path == rightFile.lastPathComponent })
+            session.toggleSelectedSide(.left, of: leftEntry, extending: [])
+            session.toggleSelectedSide(.right, of: rightEntry, extending: [leftEntry.id])
+
+            session.refresh()
+            XCTAssertTrue(session.scanning)
+            XCTAssertFalse(session.complete)
+            XCTAssertTrue(session.canOpenSelected(includingFolders: false))
+            let menu = FolderContextMenu(session: session, ids: session.selection, side: nil, compare: { _ in }).nativeMenu()
+            let command = try XCTUnwrap(menu.item(withTitle: L("Compare Selected Files", "比较所选文件")))
+            XCTAssertTrue(command.isEnabled)
+            menu.performActionForItem(at: menu.index(of: command))
+
+            let child = try XCTUnwrap(workspace.current)
+            guard case .text(let editor) = child.payload else { return XCTFail("Expected Text Compare while the folder scan is active") }
+            XCTAssertEqual(child.parent, parent.id)
+            XCTAssertEqual(editor.leftURL, leftFile)
+            XCTAssertEqual(editor.rightURL, rightFile)
+            try await waitUntil { !editor.pane(.left).busy && !editor.pane(.right).busy && session.complete }
+            XCTAssertEqual(editor.pane(.left).buffer.content.string, "left file")
+            XCTAssertEqual(editor.pane(.right).buffer.content.string, "right file")
+            await workspace.close(child.id)
+            XCTAssertEqual(workspace.current?.id, parent.id)
+            XCTAssertEqual(session.selectedSides, [leftEntry.id: .left, rightEntry.id: .right])
+            await workspace.close(parent.id)
+        }
+    }
+
+    func testCompareSelectedFilesRejectsReplacedFileDuringFolderRefresh() async throws {
+        try await fixture { temp, left, right in
+            let rightFile = right.appendingPathComponent("right.md")
+            try write("left file", to: "left.md", in: left)
+            try write("original", to: rightFile.lastPathComponent, in: right)
+            let workspace = Workspace(registry: EditRegistry(), library: SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json")))
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
+            let parent = try XCTUnwrap(workspace.current)
+            guard case .folders(let session) = parent.payload else { return XCTFail("Expected Folder Compare") }
+            try await waitUntil { session.complete }
+            let leftEntry = try XCTUnwrap(session.entries.first { $0.path == "left.md" })
+            let rightEntry = try XCTUnwrap(session.entries.first { $0.path == rightFile.lastPathComponent })
+            session.toggleSelectedSide(.left, of: leftEntry, extending: [])
+            session.toggleSelectedSide(.right, of: rightEntry, extending: [leftEntry.id])
+
+            try Data("replacement".utf8).write(to: rightFile, options: .atomic)
+            session.refresh()
+            XCTAssertTrue(session.scanning)
+            session.openSelected()
+            XCTAssertEqual(workspace.tabs.map(\.id), [parent.id])
+            XCTAssertEqual(workspace.current?.id, parent.id)
+            XCTAssertNotNil(session.notice)
+
+            try await waitUntil { session.complete }
+            XCTAssertEqual(workspace.current?.id, parent.id)
+            session.openSelected()
+            let child = try XCTUnwrap(workspace.current)
+            guard case .text(let editor) = child.payload else { return XCTFail("Expected Text Compare after refreshing") }
+            try await waitUntil { !editor.pane(.right).busy }
+            XCTAssertEqual(editor.rightURL, rightFile)
+            XCTAssertEqual(editor.pane(.right).buffer.content.string, "replacement")
+            await workspace.close(child.id)
+            await workspace.close(parent.id)
+        }
+    }
+
+    func testCompareSelectedFilesRejectsReplacementBeforeEditorRead() async throws {
+        try await fixture { temp, left, right in
+            let rightFile = right.appendingPathComponent("right.md")
+            try write("left file", to: "left.md", in: left)
+            try write("original", to: rightFile.lastPathComponent, in: right)
+            let workspace = Workspace(registry: EditRegistry(), library: SessionLibrary(storageURL: temp.appendingPathComponent("sessions.json")))
+            workspace.makeFolders(left: left, right: right, observesFileChanges: false)
+            let parent = try XCTUnwrap(workspace.current)
+            guard case .folders(let session) = parent.payload else { return XCTFail("Expected Folder Compare") }
+            try await waitUntil { session.complete }
+            let leftEntry = try XCTUnwrap(session.entries.first { $0.path == "left.md" })
+            let rightEntry = try XCTUnwrap(session.entries.first { $0.path == rightFile.lastPathComponent })
+            session.toggleSelectedSide(.left, of: leftEntry, extending: [])
+            session.toggleSelectedSide(.right, of: rightEntry, extending: [leftEntry.id])
+
+            session.refresh()
+            session.openSelected()
+            let child = try XCTUnwrap(workspace.current)
+            guard case .text(let editor) = child.payload else { return XCTFail("Expected Text Compare while the folder scan is active") }
+            try Data("replacement".utf8).write(to: rightFile, options: .atomic)
+            try await waitUntil { !editor.pane(.left).busy && !editor.pane(.right).busy }
+            XCTAssertEqual(editor.pane(.left).buffer.content.string, "left file")
+            XCTAssertNotNil(editor.pane(.right).error)
+            XCTAssertFalse(editor.editable(.right))
+            XCTAssertNil(editor.alignment)
+            XCTAssertEqual(try Data(contentsOf: rightFile), Data("replacement".utf8))
+            await workspace.close(child.id)
+            await workspace.close(parent.id)
+        }
+    }
+
     func testCopyPreviewUsesOnlySelectedSourcesInItsDirection() async throws {
         try await fixture { _, left, right in
             try write("chosen left", to: "left.md", in: left)

@@ -336,8 +336,8 @@ struct FolderView: View {
             }
             .background(FolderTableInput(session: session, compare: requestContentCompare))
             .onKeyPress(.return) {
-                guard session.complete, !session.copying,
-                      session.selection.count == 1 || session.selectedPair?.canCompareText == true else { return .ignored }
+                guard session.openableTextPair != nil ||
+                        (session.complete && !session.copying && session.selection.count == 1) else { return .ignored }
                 session.openSelected()
                 return .handled
             }

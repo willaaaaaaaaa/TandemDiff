@@ -10,6 +10,10 @@
 
 - `script/build_and_run.sh` now installs the app it builds to `/Applications/TandemDiff.app` and opens it from there, so the Mac keeps a single app copy instead of an extra one under `dist/`. `--build-only` still writes `dist/TandemDiff.app` for packaging.
 
+### Fixed
+
+- Open two text files selected with Command-click while Folder Compare scans the remaining items.
+
 ## 0.1.0 (2026-11-22)
 
 ### Added

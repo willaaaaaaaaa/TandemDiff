@@ -234,7 +234,11 @@ final class FolderSession: ObservableObject {
 
     var selectedPair: FolderSelectionPair? {
         guard !selectedSides.isEmpty, selectedSides.count <= 2 else { return nil }
-        let entries = rows.filter { selectedSides[$0.id] != nil }.map(\.entry)
+        var entries: [FolderEntry] = []
+        for row in rows where selectedSides[row.id] != nil {
+            entries.append(row.entry)
+            if entries.count == selectedSides.count { break }
+        }
         let left = entries.filter { selectedSides[$0.id]?.includes(.left) == true }
         let right = entries.filter { selectedSides[$0.id]?.includes(.right) == true }
         guard entries.count == selectedSides.count, left.count == 1, right.count == 1,
@@ -265,7 +269,7 @@ final class FolderSession: ObservableObject {
 
     let registry: EditRegistry
     var onOpen: ((FolderEntry) -> Void)?
-    var onOpenPair: ((FolderEntry, FolderEntry) -> Void)?
+    var onOpenPair: ((FolderSelectionPair, [TextSide: FileVersion]) -> Void)?
     var onChange: (() -> Void)?
     var onRecent: (([URL]) -> Void)?
     var onProtectChildren: ((Bool) async -> Bool)?
@@ -748,8 +752,8 @@ final class FolderSession: ObservableObject {
     }
 
     func openSelected() {
-        if selectedPair?.canCompareText == true {
-            openSelectedPair()
+        if let pair = openableTextPair {
+            openTextPair(pair)
             return
         }
         guard selection.count == 1 else { return }
@@ -757,10 +761,30 @@ final class FolderSession: ObservableObject {
     }
 
     func openSelectedPair() {
-        guard complete, !copying, let pair = selectedPair, pair.canCompareText, let left, let right else { return }
+        guard let pair = openableTextPair else { return }
+        openTextPair(pair)
+    }
+
+    private func openTextPair(_ pair: FolderSelectionPair) {
+        guard let left, let right else { return }
         guard rootsAreCurrent(left, right) else { refresh(); return }
+        var initialVersions: [TextSide: FileVersion] = [:]
+        if !complete {
+            guard rules.admitsTextPath(pair.left.path), rules.admitsTextPath(pair.right.path) else {
+                noticeMessage = .init("The current name filters exclude a selected file.", "当前名称筛选规则排除了所选文件。")
+                return
+            }
+            guard let leftFile = pair.left.left, let rightFile = pair.right.right,
+                  let leftVersion = pair.left.leftVersion, let rightVersion = pair.right.rightVersion,
+                  (try? FileVersion.read(leftFile)) == leftVersion,
+                  (try? FileVersion.read(rightFile)) == rightVersion else {
+                noticeMessage = .init("The selected files changed. Review the refreshed results and try again.", "所选文件已变化，请查看刷新后的结果并重试。")
+                return
+            }
+            initialVersions = [.left: leftVersion, .right: rightVersion]
+        }
         pairScrollOrigin = readTableScrollOrigin?()
-        onOpenPair?(pair.left, pair.right)
+        onOpenPair?(pair, initialVersions)
     }
 
     func openItems(ids: Set<Data>) {
